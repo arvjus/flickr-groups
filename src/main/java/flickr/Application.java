@@ -8,7 +8,6 @@ import flickr.model.GroupMatrix;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -24,24 +23,6 @@ public class Application {
     final Properties properties;
     final String baseDir;
     final Fetcher fetcher;
-
-    static class GroupDist implements Serializable {
-        GroupDist(String group, Double dist) {
-            this.group = group;
-            this.dist = dist;
-        }
-
-        String group;
-        Double dist;
-
-        public String getGroup() {
-            return group;
-        }
-
-        public Double getDist() {
-            return dist;
-        }
-    }
 
     public Application(Configuration properties, Fetcher fetcher) {
         this.properties = properties;
