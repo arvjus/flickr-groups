@@ -43,20 +43,25 @@ public class Fetcher {
         Flickr.debugStream = false;
     }
 
-    public void fetchGroupsL1AndUsersL2() throws FlickrException, IOException, InstantiationException, IllegalAccessException {
+    public void fetchGroupsL1AndUsersL2() throws FlickrException, IOException {
         String userIdL1 = properties.getProperty("userIdL1");
         Set<String> groupIds = new HashSet<>();
 
-        Set<String> userIds = (Set<String>) readFromJson(baseDir + "/users-2.json", HashSet.class);
+        Set<String> userIds = new HashSet<>();
+        List<String> blackList = Arrays.asList("61859776@N00", "2784352@N25", "2896642@N25", "497397@N20", "66351550@N00");
 
         List<Group> userL1Groups = getGroups(userIdL1);
         userL1Groups.stream().
+                filter(group -> !blackList.contains(group.getId())).
                 forEach(group -> {
                     try {
                         String groupId = group.getId();
                         groupIds.add(groupId);
                         String groupPathname = baseDir + "/groups/" + groupId + "_members.json";
-                        if (!fileExists(groupPathname)) {
+                        if (fileExists(groupPathname)) {
+                            ArrayList<LinkedHashMap<String, String>> members = (ArrayList) readFromJson(groupPathname, ArrayList.class);
+                            members.forEach(member -> userIds.add(member.get("id")));
+                        } else {
                             List<Member> members = getMembers(groupId);
                             members.forEach(member -> userIds.add(member.getId()));
                             writeGroupMembersToJson(members, groupPathname);
@@ -64,6 +69,10 @@ public class Fetcher {
                     } catch (FlickrException e) {
                         e.printStackTrace();
                     } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (IllegalAccessException e) {
+                        e.printStackTrace();
+                    } catch (InstantiationException e) {
                         e.printStackTrace();
                     }
                 });
@@ -88,7 +97,7 @@ public class Fetcher {
                     count[0] = 0;
                     if (out[0] != null)
                         out[0].close();
-                    out[0] = new FileOutputStream(new File(baseDir + "/lst#" + ++index[0]));
+                    out[0] = new FileOutputStream(new File(baseDir + "/lst/lst#" + ++index[0]));
                 }
 
                 String userPathname = baseDir + "/users/" + userId + "_groups.json";
