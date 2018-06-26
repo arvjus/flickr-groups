@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.*;
 
 import static flickr.JsonUtils.readFromJson;
 import static flickr.JsonUtils.writeToJson;
@@ -48,17 +49,17 @@ public class Application {
                         e.printStackTrace();
                     }
                 });
-        writeToJson(baseDir + "/users.json", users);
-        writeToJson(baseDir + "/groups.json", groups);
+        writeToJson(baseDir + "/users-medium.json", users);
+        writeToJson(baseDir + "/groups-medium.json", groups);
         System.out.println("number of users: " + users.size());
         System.out.println("number of groups: " + groups.size());
     }
 
     public void createGroupMatrix() throws IOException, InstantiationException, IllegalAccessException {
-        List<String> groups = (List<String>) readFromJson(baseDir + "/groups.json", ArrayList.class);
-        List<String> users = (List<String>) readFromJson(baseDir + "/users.json", ArrayList.class);
+        List<String> groups = (List<String>) readFromJson(baseDir + "/groups-medium.json", ArrayList.class);
+        List<String> users = (List<String>) readFromJson(baseDir + "/users-medium.json", ArrayList.class);
 
-        GroupMatrix groupMatrix = new GroupMatrix(baseDir + "/groups");
+        GroupMatrix groupMatrix = new GroupMatrix(baseDir + "/groups-medium");
         groupMatrix.init((String[]) groups.toArray(new String[0]), users.size());
         for (int i = 0; i < users.size(); i++) {
             final int userPos = i;
@@ -73,25 +74,25 @@ public class Application {
         String indexPathname = baseDir + "/html/index.json";
         HashSet<String> groupIds = (HashSet<String>) readFromJson(indexPathname, HashSet.class);
 
+        List<String> blackList = Arrays.asList("61859776@N00", "2784352@N25", "2896642@N25", "497397@N20", "66351550@N00");
+
         List<Group> userGroups = fetcher.getGroups(userId);
         userGroups.stream().
-                filter(group -> !groupIds.contains(group.getId())).
+                filter(group -> !groupIds.contains(group.getId()) && !blackList.contains(group.getId())).
                 forEach(group -> {
                     try {
                         System.out.println("get recommendations for " + group.getName());
                         getRecommendationsForGroup(group.getId(), topLimit);
                         groupIds.add(group.getId());
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    } catch (FlickrException e) {
-                        e.printStackTrace();
+                    } catch (Throwable t) {
+                        t.printStackTrace();
                     }
                 });
         writeToJson(indexPathname, groupIds);
     }
 
     public void getRecommendationsForGroup(String groupId, int topLimit) throws IOException, FlickrException {
-        GroupMatrix groupMatrix = new GroupMatrix(baseDir + "/groups");
+        GroupMatrix groupMatrix = new GroupMatrix(baseDir + "/groups-medium");
         groupMatrix.load();
         Map<String, Double> dist = groupMatrix.dist(groupId);
 
@@ -124,10 +125,8 @@ public class Application {
                     Map<String, String> groupInfo = fetcher.fetchGroupInfo(gd.group);
                     System.out.println("fetching info for " + groupInfo.get("name"));
                     out.write(("<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ", dist: " + gd.dist + ")<br>").getBytes());
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (FlickrException e) {
-                    e.printStackTrace();
+                } catch (Throwable t) {
+                    t.printStackTrace();
                 }
             });
 
