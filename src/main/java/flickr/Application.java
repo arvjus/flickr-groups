@@ -166,28 +166,6 @@ public class Application {
         out.close();
     }
 
-    static class Stats {
-        Double min;
-        Double q1;
-        Double median;
-        Double q3;
-        Double max;
-        Double mean;
-
-        public void calculate(String[] fields) {
-            int n = fields.length - 2;
-            min = Double.valueOf(fields[2]);
-            q1 = Double.valueOf(fields[n / 4 + 2]);
-            median = Double.valueOf(fields[n / 2 + 2]);
-            q3 = Double.valueOf(fields[n / 4 * 3 + 2]);
-            max = Double.valueOf(fields[fields.length - 1]);
-            double sum = 0.0;
-            for (int i = 2; i < fields.length; i ++)
-                sum += Double.valueOf(fields[i]);
-            mean = sum / n;
-        }
-    }
-
     public void transformDistances() throws IOException {
         try (BufferedReader in = new BufferedReader(new FileReader(baseDir + "/distances_tmp.csv"));
              BufferedWriter out = new BufferedWriter(new FileWriter(baseDir + "/distances.csv"))) {
@@ -204,8 +182,8 @@ public class Application {
                 Stats stats = new Stats();
                 stats.calculate(fields);
                 for (int i = 2; i < fields.length; i++)
-                    out.write(String.format("%f,%f,%f,%f,%f,%f,%s,%d%n",
-                            stats.min, stats.q1, stats.median, stats.q3, stats.max, stats.mean, fields[i], i - 1 <= nfirst ? 1 : 0));
+                    out.write(String.format("%f,%f,%f,%f,%f,%f,%f,%s,%d%n",
+                            stats.min, stats.q1, stats.median, stats.q3, stats.max, stats.mean, stats.sd, fields[i], i - 1 <= nfirst ? 1 : 0));
             }
         }
     }
