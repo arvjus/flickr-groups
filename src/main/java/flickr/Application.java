@@ -5,9 +5,7 @@ import com.flickr4java.flickr.groups.Group;
 import flickr.fetcher.Fetcher;
 import flickr.model.GroupMatrix;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -16,6 +14,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static flickr.JsonUtils.readFromJson;
 import static flickr.JsonUtils.writeToJson;
@@ -39,16 +38,16 @@ public class Application {
         userIds.stream().
                 filter(userId -> new File(baseDir + "/users/" + userId + "_groups.json").exists()).
 //                limit(50000).
-                forEach(userId -> {
-                    try {
-                        users.add(userId);
-                        String userPathname = baseDir + "/users/" + userId + "_groups.json";
-                        List<Map<String, String>> userGroups = (List<Map<String, String>>) readFromJson(userPathname, ArrayList.class);
-                        userGroups.forEach(map -> groups.add(map.get("id")));
-                    } catch (Throwable e) {
-                        e.printStackTrace();
-                    }
-                });
+        forEach(userId -> {
+    try {
+        users.add(userId);
+        String userPathname = baseDir + "/users/" + userId + "_groups.json";
+        List<Map<String, String>> userGroups = (List<Map<String, String>>) readFromJson(userPathname, ArrayList.class);
+        userGroups.forEach(map -> groups.add(map.get("id")));
+    } catch (Throwable e) {
+        e.printStackTrace();
+    }
+});
         writeToJson(baseDir + "/users-medium.json", users);
         writeToJson(baseDir + "/groups-medium.json", groups);
         System.out.println("number of users: " + users.size());
@@ -96,15 +95,12 @@ public class Application {
         groupMatrix.load();
         Map<String, Double> dist = groupMatrix.dist(groupId);
 
-        List<GroupDist> groupDist = new ArrayList<>();
-        for (Map.Entry<String, Double> entry : dist.entrySet())
-            groupDist.add(new GroupDist(entry.getKey(), entry.getValue()));
-        groupDist.sort(new Comparator<GroupDist>() {
-            @Override
-            public int compare(GroupDist o1, GroupDist o2) {
-                return o1.dist.compareTo(o2.dist);
-            }
-        });
+        List<GroupDist> groupDist = dist.entrySet().stream().
+                map(entry -> new GroupDist(entry.getKey(), entry.getValue())).
+                sorted((o1, o2) -> o1.getDist().compareTo(o2.getDist())).
+//                map(o -> o.getDist()).
+        collect(Collectors.toList());
+//        writeToJson(baseDir + "/group-dist.json", groupDist);
         generateReport(groupId, groupDist, topLimit);
     }
 
@@ -135,6 +131,85 @@ public class Application {
         }
     }
 
+    public void getDistancesForUser(String userId) throws FlickrException, IllegalAccessException, IOException, InstantiationException {
+        GroupMatrix groupMatrix = new GroupMatrix(baseDir + "/groups-medium");
+        groupMatrix.load();
+
+        List<String> blackList = Arrays.asList("61859776@N00", "2784352@N25", "2896642@N25", "497397@N20", "66351550@N00");
+
+        OutputStreamWriter out = new OutputStreamWriter(new FileOutputStream(baseDir + "/distances_tmp.csv"));
+
+        List<Group> userGroups = fetcher.getGroups(userId);
+        userGroups.stream().
+                filter(group -> !blackList.contains(group.getId())).
+                forEach(group -> {
+                    try {
+                        System.out.println("get recommendations for " + group.getName());
+                        out.write(group.getId());
+                        Map<String, Double> dist = groupMatrix.dist(group.getId());
+                        dist.entrySet().stream().
+                                map(entry -> new GroupDist(entry.getKey(), entry.getValue())).
+                                sorted((o1, o2) -> o1.getDist().compareTo(o2.getDist())).
+                                limit(500).
+                                forEach(groupDist -> {
+                                    try {
+                                        out.write("," + groupDist.getDist());
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                });
+                        out.write("\n");
+                    } catch (Throwable t) {
+                        t.printStackTrace();
+                    }
+                });
+        out.close();
+    }
+
+    static class Stats {
+        Double min;
+        Double q1;
+        Double median;
+        Double q3;
+        Double max;
+        Double mean;
+
+        public void calculate(String[] fields) {
+            int n = fields.length - 2;
+            min = Double.valueOf(fields[2]);
+            q1 = Double.valueOf(fields[n / 4 + 2]);
+            median = Double.valueOf(fields[n / 2 + 2]);
+            q3 = Double.valueOf(fields[n / 4 * 3 + 2]);
+            max = Double.valueOf(fields[fields.length - 1]);
+            double sum = 0.0;
+            for (int i = 2; i < fields.length; i ++)
+                sum += Double.valueOf(fields[i]);
+            mean = sum / n;
+        }
+    }
+
+    public void transformDistances() throws IOException {
+        try (BufferedReader in = new BufferedReader(new FileReader(baseDir + "/distances_tmp.csv"));
+             BufferedWriter out = new BufferedWriter(new FileWriter(baseDir + "/distances.csv"))) {
+
+            out.write(String.format("min,q1,m,x4,x5,x6,x7,y%n"));
+
+            String line;
+            while ((line = in.readLine()) != null) {
+                String[] fields = line.split(",", -1);
+                int nfirst = Integer.valueOf(fields[1]);
+                if (nfirst == 0)
+                    continue;
+
+                Stats stats = new Stats();
+                stats.calculate(fields);
+                for (int i = 2; i < fields.length; i++)
+                    out.write(String.format("%f,%f,%f,%f,%f,%f,%s,%d%n",
+                            stats.min, stats.q1, stats.median, stats.q3, stats.max, stats.mean, fields[i], i - 1 <= nfirst ? 1 : 0));
+            }
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Configuration properties = new Configuration();
         Fetcher fetcher = new Fetcher(properties);
@@ -147,7 +222,9 @@ public class Application {
         Application application = new Application(properties, fetcher);
 //        application.selectUsersGroupsSubsets();
 //        application.createGroupMatrix();
-//        application.getRecommendationsForGroup("22768280@N00", 100);
-        application.getRecommendationsForUser("31964888@N08", 100);
+//        application.getRecommendationsForGroup("22768280@N00", 10);
+//        application.getRecommendationsForUser("31964888@N08", 100);
+//        application.getDistancesForUser("31964888@N08");
+        application.transformDistances();
     }
 }
