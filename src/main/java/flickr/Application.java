@@ -7,7 +7,6 @@ import flickr.model.GroupMatrix;
 
 import java.io.*;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +17,8 @@ import java.util.stream.Collectors;
 
 import static flickr.JsonUtils.readFromJson;
 import static flickr.JsonUtils.writeToJson;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 public class Application {
     final Properties properties;
@@ -37,17 +38,16 @@ public class Application {
         List<String> userIds = (List<String>) readFromJson(baseDir + "/users-2.json", ArrayList.class);
         userIds.stream().
                 filter(userId -> new File(baseDir + "/users/" + userId + "_groups.json").exists()).
-//                limit(50000).
-        forEach(userId -> {
-    try {
-        users.add(userId);
-        String userPathname = baseDir + "/users/" + userId + "_groups.json";
-        List<Map<String, String>> userGroups = (List<Map<String, String>>) readFromJson(userPathname, ArrayList.class);
-        userGroups.forEach(map -> groups.add(map.get("id")));
-    } catch (Throwable e) {
-        e.printStackTrace();
-    }
-});
+                forEach(userId -> {
+                    try {
+                        users.add(userId);
+                        String userPathname = baseDir + "/users/" + userId + "_groups.json";
+                        List<Map<String, String>> userGroups = (List<Map<String, String>>) readFromJson(userPathname, ArrayList.class);
+                        userGroups.forEach(map -> groups.add(map.get("id")));
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
+                });
         writeToJson(baseDir + "/users-medium.json", users);
         writeToJson(baseDir + "/groups-medium.json", groups);
         System.out.println("number of users: " + users.size());
@@ -98,9 +98,7 @@ public class Application {
         List<GroupDist> groupDist = dist.entrySet().stream().
                 map(entry -> new GroupDist(entry.getKey(), entry.getValue())).
                 sorted((o1, o2) -> o1.getDist().compareTo(o2.getDist())).
-//                map(o -> o.getDist()).
-        collect(Collectors.toList());
-//        writeToJson(baseDir + "/group-dist.json", groupDist);
+                collect(Collectors.toList());
         generateReport(groupId, groupDist, topLimit);
     }
 
@@ -114,13 +112,14 @@ public class Application {
 
         try (FileOutputStream out = new FileOutputStream(new File(baseDir + "/html/" + filename))) {
             out.write("<html><body><br>".getBytes());
-            out.write(("<h2><a href=\"" + mainGroupInfo.get("url") + "\">" + mainGroupInfo.get("name") + "</a> (members: " + mainGroupInfo.get("members") + ")</h2>").getBytes());
+            out.write(("<h2><a href=\"" + mainGroupInfo.get("url") + "\">" + mainGroupInfo.get("name") + "</a> (members: " + mainGroupInfo.get("members") + ", id: " + groupId + ")</h2>").getBytes());
 
-            groupDist.stream().filter(gd -> !groupId.equals(gd.group)).limit(topLimit).forEach(gd -> {
+            final int[] count = {0};
+            groupDist.stream().filter(gd -> !groupId.equals(gd.groupId)).limit(topLimit).forEach(gd -> {
                 try {
-                    Map<String, String> groupInfo = fetcher.fetchGroupInfo(gd.group);
+                    Map<String, String> groupInfo = fetcher.fetchGroupInfo(gd.groupId);
                     System.out.println("fetching info for " + groupInfo.get("name"));
-                    out.write(("<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ", dist: " + gd.dist + ")<br>").getBytes());
+                    out.write(("" + String.format("%03d ", ++count[0]) + "<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ", dist: " + gd.dist + ")<br>").getBytes());
                 } catch (Throwable t) {
                     t.printStackTrace();
                 }
@@ -168,24 +167,56 @@ public class Application {
 
     public void transformDistances() throws IOException {
         try (BufferedReader in = new BufferedReader(new FileReader(baseDir + "/distances_tmp.csv"));
-             BufferedWriter out = new BufferedWriter(new FileWriter(baseDir + "/distances.csv"))) {
+             BufferedWriter out = new BufferedWriter(new FileWriter(baseDir + "/distances_test.csv"))) {
 
-            out.write(String.format("min,q1,m,x4,x5,x6,x7,y%n"));
+            out.write(String.format("members,min,q1,median,q3,max,mean,sd,dist,y%n"));
 
             String line;
             while ((line = in.readLine()) != null) {
                 String[] fields = line.split(",", -1);
                 int nfirst = Integer.valueOf(fields[1]);
-                if (nfirst == 0)
+                if (nfirst > 1)
                     continue;
 
                 Stats stats = new Stats();
                 stats.calculate(fields);
-                for (int i = 2; i < fields.length; i++)
-                    out.write(String.format("%f,%f,%f,%f,%f,%f,%f,%s,%d%n",
-                            stats.min, stats.q1, stats.median, stats.q3, stats.max, stats.mean, stats.sd, fields[i], i - 1 <= nfirst ? 1 : 0));
+                for (int i = 3; i < fields.length; i++)
+                    out.write(String.format("%f,%f,%f,%f,%f,%f,%f,%f,%s,%d%n",
+                            stats.members, stats.min, stats.q1, stats.median, stats.q3, stats.max, stats.mean, stats.sd, fields[i], i - 3 < nfirst ? 1 : 0));
             }
         }
+    }
+
+    public void getTotalRecommendations() throws IOException {
+        GroupMatrix groupMatrix = new GroupMatrix(baseDir + "/groups-medium");
+        groupMatrix.load();
+
+        Map<String, Integer> groups = new HashMap<>();
+        try (BufferedReader in = new BufferedReader(new FileReader(baseDir + "/distances_tmp.csv"))) {
+
+            String line;
+            while ((line = in.readLine()) != null) {
+                String[] fields = line.split(",", -1);
+                String groupId = fields[0];
+                int nfirst = Integer.valueOf(fields[1]);
+                if (nfirst < 1)
+                    continue;
+
+                System.out.println("get recommendations for " + groupId);
+
+                Map<String, Double> dist = groupMatrix.dist(groupId);
+                dist.entrySet().stream().
+                        map(entry -> new GroupDist(entry.getKey(), entry.getValue())).
+                        sorted((o1, o2) -> o1.getDist().compareTo(o2.getDist())).
+                        limit(nfirst).
+                        map(groupDist -> groupDist.getGroupId()).
+                        forEach(gid -> {
+                            Integer count = groups.get(gid);
+                            groups.put(gid, count == null ? 1 : count + 1);
+                        });
+            }
+        }
+        writeToJson(baseDir + "/total-recommendations.json", groups);
     }
 
     public static void main(String[] args) throws Exception {
@@ -201,8 +232,9 @@ public class Application {
 //        application.selectUsersGroupsSubsets();
 //        application.createGroupMatrix();
 //        application.getRecommendationsForGroup("22768280@N00", 10);
-//        application.getRecommendationsForUser("31964888@N08", 100);
+//        application.getRecommendationsForUser("31964888@N08", 200);
 //        application.getDistancesForUser("31964888@N08");
-        application.transformDistances();
+//        application.transformDistances();
+        application.getTotalRecommendations();
     }
 }

@@ -3,16 +3,16 @@ package flickr;
 import java.io.Serializable;
 
 public class GroupDist implements Serializable {
-    GroupDist(String group, Double dist) {
-        this.group = group;
+    GroupDist(String groupId, Double dist) {
+        this.groupId = groupId;
         this.dist = dist;
     }
 
-    String group;
+    String groupId;
     Double dist;
 
-    public String getGroup() {
-        return group;
+    public String getGroupId() {
+        return groupId;
     }
 
     public Double getDist() {
