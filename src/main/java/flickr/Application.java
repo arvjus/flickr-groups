@@ -226,13 +226,12 @@ public class Application {
     }
 
     public void fetchInfoForTotalRecommendations() throws IOException, InstantiationException, IllegalAccessException {
-        HashMap groups = (HashMap) readFromJson(baseDir + "/total-recommendations.json", HashMap.class);
-/*        ArrayList<HashMap$Node> list = new ArrayList<>(groups.entrySet());
-
-        list.stream().map(entry -> {
-            return entry;
-        }).forEach(map->{});
-        list.sort(Map.Entry.comparingByValue(((o1, o2) -> o2.compareTo(o1))));
+        ArrayList<LinkedHashMap> list = (ArrayList) readFromJson(baseDir + "/total-recommendations.json", ArrayList.class);
+/*
+        list.stream().map(map -> {
+            Recommendation recommendation = new Recommendation(map.get(""), 1);
+            return recommendation;
+        }).sort(Map.Entry.comparingByValue(((o1, o2) -> o2.compareTo(o1))));
 */
         final int[] count = {0};
         /*
@@ -244,7 +243,7 @@ public class Application {
                     try {
                         Map<String, String> groupInfo = fetcher.fetchGroupInfo(groupId);
                         System.out.println("fetching info for " + groupInfo.get("name"));
-                        out.write(("" + String.format("%03d ", ++count[0]) + "<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ")<br>").getBytes());
+                        out.write(("" + String.format("%04d ", ++count[0]) + "<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ")<br>").getBytes());
                     } catch (Throwable t) {
                         t.printStackTrace();
                     }
@@ -276,8 +275,8 @@ public class Application {
 //        application.getRecommendationsForUser("31964888@N08", 200);
 //        application.getDistancesForUser("31964888@N08");
 //        application.transformDistances();
-        application.getTotalRecommendations();
-//        application.fetchInfoForTotalRecommendations();
+//        application.getTotalRecommendations();
+        application.fetchInfoForTotalRecommendations();
 
     }
 }
