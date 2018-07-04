@@ -15,6 +15,7 @@ import java.util.Set;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.sun.xml.internal.xsom.impl.UName.comparator;
 import static flickr.JsonUtils.readFromJson;
 import static flickr.JsonUtils.writeToJson;
 import static java.lang.Math.max;
@@ -219,6 +220,36 @@ public class Application {
         writeToJson(baseDir + "/total-recommendations.json", groups);
     }
 
+    public void fetchInfoForTotalRecommendations() throws IOException, InstantiationException, IllegalAccessException {
+        HashMap groups = (HashMap<String, Integer>) readFromJson(baseDir + "/total-recommendations.json", HashMap.class);
+        List<Map.Entry<String, Integer>> list = new ArrayList<>(groups.entrySet());
+        list.sort(Map.Entry.comparingByValue(((o1, o2) -> o2.compareTo(o1))));
+
+        final int[] count = {998};
+        for (int idx = 3; idx <= list.size()/500+1; idx ++) {
+            final int finalIdx = idx;
+            try (FileOutputStream out = new FileOutputStream(new File(baseDir + "/html/list" + finalIdx + ".html"))) {
+                out.write("<html><body><br>".getBytes());
+                list.stream().map(Map.Entry::getKey).skip(count[0]).limit(500).forEach(groupId -> {
+                    try {
+                        Map<String, String> groupInfo = fetcher.fetchGroupInfo(groupId);
+                        System.out.println("fetching info for " + groupInfo.get("name"));
+                        out.write(("" + String.format("%03d ", ++count[0]) + "<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ")<br>").getBytes());
+                    } catch (Throwable t) {
+                        t.printStackTrace();
+                    }
+                });
+                out.write("</body></html>".getBytes());
+                out.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         Configuration properties = new Configuration();
         Fetcher fetcher = new Fetcher(properties);
@@ -235,6 +266,8 @@ public class Application {
 //        application.getRecommendationsForUser("31964888@N08", 200);
 //        application.getDistancesForUser("31964888@N08");
 //        application.transformDistances();
-        application.getTotalRecommendations();
+//        application.getTotalRecommendations();
+        application.fetchInfoForTotalRecommendations();
+
     }
 }
