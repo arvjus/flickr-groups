@@ -15,11 +15,8 @@ import java.util.Set;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.sun.xml.internal.xsom.impl.UName.comparator;
 import static flickr.JsonUtils.readFromJson;
 import static flickr.JsonUtils.writeToJson;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 public class Application {
     final Properties properties;
@@ -192,19 +189,20 @@ public class Application {
         GroupMatrix groupMatrix = new GroupMatrix(baseDir + "/groups-medium");
         groupMatrix.load();
 
-        Map<String, Integer> groups = new HashMap<>();
+        Map<String, Recommendation> recommendations = new HashMap<>();
         try (BufferedReader in = new BufferedReader(new FileReader(baseDir + "/distances_tmp.csv"))) {
 
             String line;
             while ((line = in.readLine()) != null) {
                 String[] fields = line.split(",", -1);
                 String groupId = fields[0];
+                recommendations.put(groupId, new Recommendation(groupId, 1));
                 int nfirst = Integer.valueOf(fields[1]);
                 if (nfirst < 1)
                     continue;
 
                 System.out.println("get recommendations for " + groupId);
-
+                int order[] = {1};
                 Map<String, Double> dist = groupMatrix.dist(groupId);
                 dist.entrySet().stream().
                         map(entry -> new GroupDist(entry.getKey(), entry.getValue())).
@@ -212,21 +210,33 @@ public class Application {
                         limit(nfirst).
                         map(groupDist -> groupDist.getGroupId()).
                         forEach(gid -> {
-                            Integer count = groups.get(gid);
-                            groups.put(gid, count == null ? 1 : count + 1);
+                            Recommendation recommendation = recommendations.get(gid);
+                            if (recommendation == null)
+                                recommendation = new Recommendation(gid, order[0]);
+                            else {
+                                recommendation.setOrder(order[0]);
+                                recommendation.incCount();
+                            }
+                            recommendations.put(gid, recommendation);
+                            order[0]++;
                         });
             }
         }
-        writeToJson(baseDir + "/total-recommendations.json", groups);
+        writeToJson(baseDir + "/total-recommendations.json", recommendations.values());
     }
 
     public void fetchInfoForTotalRecommendations() throws IOException, InstantiationException, IllegalAccessException {
-        HashMap groups = (HashMap<String, Integer>) readFromJson(baseDir + "/total-recommendations.json", HashMap.class);
-        List<Map.Entry<String, Integer>> list = new ArrayList<>(groups.entrySet());
-        list.sort(Map.Entry.comparingByValue(((o1, o2) -> o2.compareTo(o1))));
+        HashMap groups = (HashMap) readFromJson(baseDir + "/total-recommendations.json", HashMap.class);
+/*        ArrayList<HashMap$Node> list = new ArrayList<>(groups.entrySet());
 
-        final int[] count = {998};
-        for (int idx = 3; idx <= list.size()/500+1; idx ++) {
+        list.stream().map(entry -> {
+            return entry;
+        }).forEach(map->{});
+        list.sort(Map.Entry.comparingByValue(((o1, o2) -> o2.compareTo(o1))));
+*/
+        final int[] count = {0};
+        /*
+        for (int idx = 1; idx <= list.size() / 500 + 1; idx++) {
             final int finalIdx = idx;
             try (FileOutputStream out = new FileOutputStream(new File(baseDir + "/html/list" + finalIdx + ".html"))) {
                 out.write("<html><body><br>".getBytes());
@@ -246,8 +256,8 @@ public class Application {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
         }
+        */
     }
 
     public static void main(String[] args) throws Exception {
@@ -266,8 +276,8 @@ public class Application {
 //        application.getRecommendationsForUser("31964888@N08", 200);
 //        application.getDistancesForUser("31964888@N08");
 //        application.transformDistances();
-//        application.getTotalRecommendations();
-        application.fetchInfoForTotalRecommendations();
+        application.getTotalRecommendations();
+//        application.fetchInfoForTotalRecommendations();
 
     }
 }
