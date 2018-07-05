@@ -5,14 +5,24 @@ import com.flickr4java.flickr.groups.Group;
 import flickr.fetcher.Fetcher;
 import flickr.model.GroupMatrix;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.*;
 import java.util.stream.Collectors;
 
 import static flickr.JsonUtils.readFromJson;
@@ -196,7 +206,7 @@ public class Application {
             while ((line = in.readLine()) != null) {
                 String[] fields = line.split(",", -1);
                 String groupId = fields[0];
-                recommendations.put(groupId, new Recommendation(groupId, 1));
+                recommendations.put(groupId, new Recommendation(groupId, 1, 1));
                 int nfirst = Integer.valueOf(fields[1]);
                 if (nfirst < 1)
                     continue;
@@ -212,7 +222,7 @@ public class Application {
                         forEach(gid -> {
                             Recommendation recommendation = recommendations.get(gid);
                             if (recommendation == null)
-                                recommendation = new Recommendation(gid, order[0]);
+                                recommendation = new Recommendation(gid, order[0], 1);
                             else {
                                 recommendation.setOrder(order[0]);
                                 recommendation.incCount();
@@ -222,41 +232,36 @@ public class Application {
                         });
             }
         }
-        writeToJson(baseDir + "/total-recommendations.json", recommendations.values());
+        writeToJson(baseDir + "/recommendations.json", recommendations.values());
     }
 
     public void fetchInfoForTotalRecommendations() throws IOException, InstantiationException, IllegalAccessException {
-        ArrayList<LinkedHashMap> list = (ArrayList) readFromJson(baseDir + "/total-recommendations.json", ArrayList.class);
-/*
-        list.stream().map(map -> {
-            Recommendation recommendation = new Recommendation(map.get(""), 1);
-            return recommendation;
-        }).sort(Map.Entry.comparingByValue(((o1, o2) -> o2.compareTo(o1))));
-*/
+        ArrayList<LinkedHashMap<String, Object>> rawlist = (ArrayList) readFromJson(baseDir + "/recommendations.json", ArrayList.class);
+        List<Recommendation> recommendations = rawlist.stream().
+                map(map -> {
+                    return new Recommendation((String) map.get("groupId"), (Integer) map.get("order"), (Integer) map.get("count"));
+                }).
+                sorted(((o1, o2) -> o1.compareTo(o2))).
+                collect(Collectors.toList());
+
         final int[] count = {0};
-        /*
-        for (int idx = 1; idx <= list.size() / 500 + 1; idx++) {
-            final int finalIdx = idx;
-            try (FileOutputStream out = new FileOutputStream(new File(baseDir + "/html/list" + finalIdx + ".html"))) {
-                out.write("<html><body><br>".getBytes());
-                list.stream().map(Map.Entry::getKey).skip(count[0]).limit(500).forEach(groupId -> {
-                    try {
-                        Map<String, String> groupInfo = fetcher.fetchGroupInfo(groupId);
-                        System.out.println("fetching info for " + groupInfo.get("name"));
-                        out.write(("" + String.format("%04d ", ++count[0]) + "<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ")<br>").getBytes());
-                    } catch (Throwable t) {
-                        t.printStackTrace();
-                    }
-                });
-                out.write("</body></html>".getBytes());
-                out.close();
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        try (FileOutputStream out = new FileOutputStream(new File(baseDir + "/html/recommendations.html"))) {
+            out.write("<html><body><br>".getBytes());
+            recommendations.forEach(recommendation -> {
+                try {
+                    Map<String, String> groupInfo = fetcher.fetchGroupInfo(recommendation.getGroupId());
+                    System.out.println("fetching info for " + groupInfo.get("name"));
+                    out.write(("" + String.format("%04d ", ++count[0]) + "<a href=\"" + groupInfo.get("url") + "\">" + groupInfo.get("name") + "</a> (members: " + groupInfo.get("members") + ")<br>").getBytes());
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
+            });
+            out.write("</body></html>".getBytes());
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        */
     }
 
     public static void main(String[] args) throws Exception {

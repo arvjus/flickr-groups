@@ -5,10 +5,10 @@ public class Recommendation {
     private int count;
     private int order;
 
-    public Recommendation(String groupId, int order) {
+    public Recommendation(String groupId, int order, int count) {
         this.groupId = groupId;
         this.order = order;
-        this.count = 1;
+        this.count = count;
     }
 
     public void setOrder(int order) {
@@ -33,8 +33,8 @@ public class Recommendation {
     }
 
     public int compareTo(Recommendation r) {
-        if (count == r.count)
-            return order - r.order;
-        return r.count - count;
+        if (order == r.order)
+            return r.count - count;
+        return order - r.order;
     }
 }
